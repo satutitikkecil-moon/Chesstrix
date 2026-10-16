@@ -1,18 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { fetchChessComProfile, fetchRecentGames, ChessComProfile } from '../utils/chessComApi.ts';
 import { GameMetadata, SAMPLE_GAMES, analyzePgnGame, AnalyzedGame } from '../utils/sampleGames.ts';
-import { Search, Globe, User, Swords, Zap, CheckCircle2, AlertTriangle, FileText, Play } from 'lucide-react';
+import { Search, Globe, User, Swords, Zap, CheckCircle2, AlertTriangle, FileText, Play, BookmarkPlus, Star } from 'lucide-react';
+import { getSavedPlayers, savePlayer, getActivePlayerUsername, setActivePlayerUsername, SavedPlayer } from '../utils/playerStorage.ts';
 
 interface ChessComSyncProps {
   onAnalyzeGame: (analyzed: AnalyzedGame) => void;
 }
 
 export const ChessComSync: React.FC<ChessComSyncProps> = ({ onAnalyzeGame }) => {
-  const [username, setUsername] = useState<string>('Hikaru');
+  const [username, setUsername] = useState<string>(() => getActivePlayerUsername());
   const [profile, setProfile] = useState<ChessComProfile | null>(null);
   const [recentGames, setRecentGames] = useState<GameMetadata[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
+  const [savedList, setSavedList] = useState<SavedPlayer[]>(() => getSavedPlayers());
 
   // Custom PGN paste state
   const [customPgn, setCustomPgn] = useState<string>('');
@@ -20,17 +23,24 @@ export const ChessComSync: React.FC<ChessComSyncProps> = ({ onAnalyzeGame }) => 
 
   const popularUsers = ['Hikaru', 'MagnusCarlsen', 'GothamChess', 'DanielNaroditsky'];
 
+  // Initial fetch on mount
+  useEffect(() => {
+    handleFetchProfile(getActivePlayerUsername());
+  }, []);
+
   const handleFetchProfile = async (targetUser?: string) => {
     const userToFetch = targetUser || username;
     if (!userToFetch.trim()) return;
 
     setLoading(true);
     setErrorMsg(null);
+    setSavedSuccess(false);
 
     try {
       const prof = await fetchChessComProfile(userToFetch);
       if (prof) {
         setProfile(prof);
+        setUsername(prof.username);
         const games = await fetchRecentGames(userToFetch);
         setRecentGames(games);
       } else {
@@ -41,6 +51,22 @@ export const ChessComSync: React.FC<ChessComSyncProps> = ({ onAnalyzeGame }) => 
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSaveCurrentPlayer = () => {
+    if (!profile) return;
+    savePlayer({
+      username: profile.username,
+      name: profile.name || profile.username,
+      avatar: profile.avatar,
+      isMainAccount: true,
+      lastBlitzRating: profile.stats?.blitz?.last,
+      lastRapidRating: profile.stats?.rapid?.last
+    });
+    setSavedList(getSavedPlayers());
+    setActivePlayerUsername(profile.username);
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 2500);
   };
 
   const handleAnalyzePreset = (gameMeta: GameMetadata) => {
@@ -112,8 +138,36 @@ export const ChessComSync: React.FC<ChessComSyncProps> = ({ onAnalyzeGame }) => 
           </button>
         </div>
 
+        {/* Saved Player ID Chips */}
+        {savedList.length > 0 && (
+          <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto pb-1">
+            <span className="text-[10px] text-emerald-400 font-bold shrink-0">Tersimpan:</span>
+            {savedList.map((p) => {
+              const isCurrent = username.toLowerCase() === p.username.toLowerCase();
+              return (
+                <button
+                  key={p.username}
+                  type="button"
+                  onClick={() => {
+                    setUsername(p.username);
+                    handleFetchProfile(p.username);
+                  }}
+                  className={`min-h-[36px] px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors shrink-0 cursor-pointer flex items-center gap-1 border ${
+                    isCurrent
+                      ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                      : 'bg-slate-800/80 hover:bg-slate-700 border-slate-700/60 text-slate-300'
+                  }`}
+                >
+                  <Star className={`w-3 h-3 ${p.isMainAccount ? 'fill-amber-400 text-amber-400' : 'text-slate-500'}`} />
+                  <span>{p.username}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Quick User Chips */}
-        <div className="flex items-center gap-1.5 mt-2.5 overflow-x-auto pb-1">
+        <div className="flex items-center gap-1.5 mt-1.5 overflow-x-auto pb-1">
           <span className="text-[10px] text-slate-500 shrink-0">Populer:</span>
           {popularUsers.map((u) => (
             <button
@@ -123,7 +177,7 @@ export const ChessComSync: React.FC<ChessComSyncProps> = ({ onAnalyzeGame }) => 
                 setUsername(u);
                 handleFetchProfile(u);
               }}
-              className="min-h-[44px] px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-[11px] text-slate-300 transition-colors shrink-0 cursor-pointer"
+              className="min-h-[36px] px-2 py-0.5 rounded-lg bg-slate-800/60 hover:bg-slate-700 text-[10px] text-slate-400 hover:text-slate-200 transition-colors shrink-0 cursor-pointer"
             >
               {u}
             </button>
@@ -142,35 +196,47 @@ export const ChessComSync: React.FC<ChessComSyncProps> = ({ onAnalyzeGame }) => 
       {/* Profile Card (If fetched) */}
       {profile && (
         <div className="bg-gradient-to-br from-slate-900 to-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-lg">
-          <div className="flex items-center gap-3 mb-3">
-            {profile.avatar ? (
-              <img
-                src={profile.avatar}
-                alt={profile.username}
-                referrerPolicy="no-referrer"
-                className="w-12 h-12 rounded-xl object-cover border border-slate-700 shadow-md"
-              />
-            ) : (
-              <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400">
-                <User className="w-6 h-6" />
-              </div>
-            )}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              {profile.avatar ? (
+                <img
+                  src={profile.avatar}
+                  alt={profile.username}
+                  referrerPolicy="no-referrer"
+                  className="w-12 h-12 rounded-xl object-cover border border-slate-700 shadow-md"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center text-slate-400">
+                  <User className="w-6 h-6" />
+                </div>
+              )}
 
-            <div>
-              <div className="flex items-center gap-1.5">
-                {profile.title && (
-                  <span className="bg-rose-500 text-white font-mono text-[10px] font-extrabold px-1.5 py-0.2 rounded">
-                    {profile.title}
-                  </span>
-                )}
-                <h3 className="text-sm font-bold text-white">
-                  {profile.username}
-                </h3>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  {profile.title && (
+                    <span className="bg-rose-500 text-white font-mono text-[10px] font-extrabold px-1.5 py-0.2 rounded">
+                      {profile.title}
+                    </span>
+                  )}
+                  <h3 className="text-sm font-bold text-white">
+                    {profile.username}
+                  </h3>
+                </div>
+                <span className="text-[11px] text-slate-400 block">
+                  {profile.name || 'Pemain Chess.com'}
+                </span>
               </div>
-              <span className="text-[11px] text-slate-400 block">
-                {profile.name || 'Pemain Chess.com'}
-              </span>
             </div>
+
+            {/* Simpan ID Pemain Button */}
+            <button
+              type="button"
+              onClick={handleSaveCurrentPlayer}
+              className="min-h-[40px] px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-transform active:scale-95 cursor-pointer"
+            >
+              <BookmarkPlus className="w-3.5 h-3.5 text-emerald-400" />
+              <span>{savedSuccess ? 'Tersimpan!' : 'Simpan ID'}</span>
+            </button>
           </div>
 
           {/* Ratings Grid */}

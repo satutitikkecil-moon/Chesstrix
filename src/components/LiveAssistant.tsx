@@ -12,6 +12,7 @@ import {
 } from '../utils/chessEngine.ts';
 import { findOpening, OpeningStat } from '../utils/openingsData.ts';
 import { playChessSound } from '../utils/chessAudio.ts';
+import { InGameAICoach } from './InGameAICoach.tsx';
 import { 
   RotateCcw, 
   ArrowLeftRight, 
@@ -21,7 +22,8 @@ import {
   ShieldAlert, 
   Lightbulb, 
   Dices,
-  Info
+  Info,
+  Bot
 } from 'lucide-react';
 
 interface LiveAssistantProps {
@@ -29,13 +31,15 @@ interface LiveAssistantProps {
   loadMoves?: string[] | null;
   onClearLoadMoves?: () => void;
   onJumpToReviewWithFen?: (fen: string) => void;
+  onOpenCoachAi?: (data: { fen: string; turn: 'w' | 'b'; evalScore: string; openingName?: string; moves: string[] }) => void;
 }
 
 export const LiveAssistant: React.FC<LiveAssistantProps> = ({
   soundEnabled,
   loadMoves,
   onClearLoadMoves,
-  onJumpToReviewWithFen
+  onJumpToReviewWithFen,
+  onOpenCoachAi
 }) => {
   const [chess] = useState<Chess>(() => new Chess());
   const [fen, setFen] = useState<string>(chess.fen());
@@ -264,86 +268,26 @@ export const LiveAssistant: React.FC<LiveAssistantProps> = ({
         </button>
       </div>
 
-      {/* Real-time Best Move & Strategy Recommendation Card */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900/90 to-emerald-950/30 border border-emerald-500/30 rounded-2xl p-3.5 shadow-lg">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
-                Rekomendasi Langkah Terbaik
-              </h3>
-              <span className="text-[11px] text-slate-400">Mesin Minimax + AlphaBeta</span>
-            </div>
-          </div>
+      {/* In-Game AI Assistant Coach (Live on Board) */}
+      <InGameAICoach
+        fen={fen}
+        turn={chess.turn()}
+        evalScore={engineResult.evalString}
+        openingName={opening?.name}
+        recentMoves={historySan}
+        bestMoveSan={engineResult.bestMove?.san}
+        bestMoveFromTo={engineResult.bestMove ? { from: engineResult.bestMove.from, to: engineResult.bestMove.to } : null}
+        threats={engineResult.threats}
+        soundEnabled={soundEnabled}
+        onPlayMove={(move) => {
+          handleMakeMove({
+            from: move.from,
+            to: move.to
+          });
+        }}
+      />
 
-          <div className="text-right">
-            <span className="text-[10px] text-slate-400 block">Evaluasi Posisi</span>
-            <span className="text-sm font-mono font-bold text-emerald-400">
-              {engineResult.evalString}
-            </span>
-          </div>
-        </div>
 
-        {/* Big Move Display */}
-        {engineResult.bestMove ? (
-          <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3 mb-2.5 flex items-center justify-between">
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-mono font-extrabold text-white tracking-tight">
-                {engineResult.bestMove.san}
-              </span>
-              <span className="text-xs text-slate-400 font-mono">
-                ({engineResult.bestMove.from} → {engineResult.bestMove.to})
-              </span>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (engineResult.bestMove) {
-                  handleMakeMove({
-                    from: engineResult.bestMove.from,
-                    to: engineResult.bestMove.to
-                  });
-                  if (soundEnabled) playChessSound('best');
-                }
-              }}
-              className="min-h-[44px] px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-transform active:scale-95 shadow-md flex items-center gap-1.5 cursor-pointer"
-            >
-              <span>Mainkan</span>
-              <span>⚡</span>
-            </button>
-          </div>
-        ) : (
-          <div className="p-3 text-xs text-slate-400 text-center">Permainan berakhir.</div>
-        )}
-
-        {/* Tactical Advice & Explanation */}
-        <div className="flex items-start gap-2 text-xs text-slate-300 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/60">
-          <Lightbulb className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <p className="leading-relaxed text-[12px]">{engineResult.advice}</p>
-        </div>
-      </div>
-
-      {/* Tactical Threats Warning (If any detected) */}
-      {engineResult.threats.length > 0 && (
-        <div className="bg-rose-950/25 border border-rose-500/30 rounded-2xl p-3">
-          <div className="flex items-center gap-2 mb-1.5 text-rose-300 text-xs font-semibold">
-            <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0" />
-            <span>Peringatan Ancaman Taktis Lawan</span>
-          </div>
-          <div className="space-y-1.5">
-            {engineResult.threats.map((threat, idx) => (
-              <div key={idx} className="text-[12px] text-slate-300 flex items-start gap-1.5">
-                <span className="text-rose-400 font-bold">·</span>
-                <span>{threat.description}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Opening Database Match (If current move sequence matches ECO) */}
       {opening && (
