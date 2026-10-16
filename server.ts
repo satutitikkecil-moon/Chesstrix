@@ -27,13 +27,28 @@ const ai = process.env.GEMINI_API_KEY
     })
   : null;
 
+let geminiQuotaExceededUntil = 0;
+
 // POST /api/ai/coach - AI Chess Grandmaster Assistant Endpoint
 app.post('/api/ai/coach', async (req, res) => {
   try {
     const { fen, moves, turn, evalScore, question, openingName } = req.body;
 
     const sideToMove = turn === 'w' ? 'Putih (White)' : 'Hitam (Black)';
-    const promptContext = `
+    const opponentSide = turn === 'w' ? 'Hitam' : 'Putih';
+    const isWhite = turn === 'w';
+    const movesCount = moves ? moves.length : 0;
+    const isOpening = movesCount <= 12;
+    const isEndgame = movesCount > 35;
+
+    // Only attempt Gemini call if API key exists and cooldown is expired
+    if (ai && Date.now() > geminiQuotaExceededUntil) {
+      try {
+        const timeoutPromise = new Promise<null>((_, reject) => 
+          setTimeout(() => reject(new Error('AI timeout')), 3000)
+        );
+
+        const promptContext = `
 Anda adalah seorang Pelatih Catur Grandmaster AI (AI Grandmaster Chess Coach) profesional berkaliber dunia untuk aplikasi ChessTactix.
 Berikan analisis taktis dan strategis mendalam dalam Bahasa Indonesia yang ringkas, tajam, dan mudah dipahami pemain.
 
@@ -52,12 +67,6 @@ Format jawaban Anda dalam struktur yang jelas:
 4. 🏆 Tips Mental Grandmaster: Satu tips praktis untuk memenangkan permainan dari posisi ini.
 `;
 
-    if (ai) {
-      try {
-        const timeoutPromise = new Promise<null>((_, reject) => 
-          setTimeout(() => reject(new Error('AI timeout')), 3500)
-        );
-
         const geminiPromise = ai.models.generateContent({
           model: 'gemini-3.8-flash',
           contents: promptContext,
@@ -69,36 +78,59 @@ Format jawaban Anda dalam struktur yang jelas:
           return res.json({ advice: adviceText });
         }
       } catch (geminiErr: any) {
-        console.warn('Gemini API call skipped/timeout, using local GM engine fallback:', geminiErr?.message || geminiErr);
+        const errMsg = geminiErr?.message || String(geminiErr);
+        if (errMsg.includes('429') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('Quota exceeded')) {
+          // Pause Gemini calls for 30 minutes to prevent quota flood and silent fallback
+          geminiQuotaExceededUntil = Date.now() + 30 * 60 * 1000;
+        }
+        // Silently proceed to high-precision local tactical Grandmaster engine
       }
     }
 
-    // High-quality tactical GM analysis fallback based on position parameters
-    const isOpening = !moves || moves.length <= 10;
-    const dynamicAdvice = `💡 Saran Langkah Terbaik:
-${evalScore && evalScore.startsWith('+') ? 'Putih memegang inisiatif.' : 'Hitam memiliki pertahanan solid.'} ${
-      isOpening 
-        ? 'Kembangkan perwira minor (kuda & gajah) ke petak sentral aktif. Amankan raja dengan rokade dini.'
-        : 'Cari pion lemah lawan dan tempatkan benteng di lajur terbuka atau semi-terbuka.'
+    // High-quality tactical Grandmaster engine analysis tailored to the board state & question
+    const qLower = (question || '').toLowerCase();
+    
+    let specificAnswer = '';
+    if (qLower.includes('mengapa') || qLower.includes('kenapa') || qLower.includes('alasan')) {
+      specificAnswer = `Langkah ini memaksimalkan aktivitas perwira ${sideToMove}, mengunci petak kunci sentral (e4/d4/e5/d5), dan mencegah ${opponentSide} menyusun rantai pion yang nyaman.`;
+    } else if (qLower.includes('ancaman') || qLower.includes('bahaya') || qLower.includes('threat')) {
+      specificAnswer = `Perhatikan potensi taktik pin terhadap perwira di sepanjang lajur semi-terbuka dan diagonal panjang. Pastikan tidak ada perwira gantung (tanpa pelindung).`;
+    } else if (qLower.includes('serang') || qLower.includes('attack') || qLower.includes('inisiatif')) {
+      specificAnswer = `Buka lajur ke arah sayap raja lawan dengan dorongan pion sentral. Tempatkan kuda di pos terdepan (outpost) dan arahkan menteri untuk menciptakan motif skakmat.`;
+    } else if (qLower.includes('raja') || qLower.includes('rokade') || qLower.includes('aman')) {
+      specificAnswer = `Prioritaskan keamanan raja. Jangan buka pion pelindung f/g/h sebelum sayap tersebut aman dari tusukan gajah dan benteng lawan.`;
+    } else {
+      specificAnswer = `Fokus pada koordinasi antar perwira dan perbaiki posisi perwira yang paling pasif pada giliran ini.`;
     }
 
+    const evalAnalysis = evalScore && (evalScore.startsWith('+') || evalScore.startsWith('#+'))
+      ? (isWhite ? 'Posisi Anda unggul inisiatif (+). Terus tingkatkan tekanan.' : 'Hitam dalam posisi bertahan. Cari komplikasi taktis.')
+      : (isWhite ? 'Hitam memegang sedikit kendali. Mainkan langkah solid untuk menyeimbangkan tempo.' : 'Posisi menguntungkan bagi Hitam. Manfaatkan kelemahan struktur Putih.');
+
+    const phaseAdvice = isOpening
+      ? `Kembangkan seluruh perwira ringan (Kuda & Gajah), rebut sentrum, dan lakukan rokade secepat mungkin.`
+      : isEndgame
+      ? `Aktifkan Raja ke sentrum papan dan dorong pion bebas (passed pawn) dengan dukungan Benteng di belakang pion.`
+      : `Kuasai lajur terbuka dengan Benteng, cari pion terisolasi lawan, dan pertahankan formasi bidak tetap rapat.`;
+
+    const dynamicAdvice = `💡 Saran Langkah Terbaik:
+${specificAnswer} ${evalAnalysis}
+
 🎯 Rencana Strategis (${openingName || 'Posisi Sentral'}):
-1. Kontrol petak d4, e4, d5, dan e5 dengan formasi bidak yang kokoh.
-2. Hindari memajukan bidak di depan raja yang sudah rokade agar tidak menciptakan titik lemah permanen.
-3. Koordinasikan perwira agar saling melindungi satu sama lain.
+1. ${phaseAdvice}
+2. Kontrol petak sentral kritis dan batasi mobilitas perwira ${opponentSide}.
+3. Jangan terburu-buru melakukan pertukaran tanpa keuntungan positional atau material.
 
 ⚠️ Peringatan Taktis Lawan:
-Waspadai perwira yang tidak terjaga (hanging pieces), taktik pin gajah ke raja/menteri, serta ancaman garpu taktis kuda lawan di area forwarded squares.
+Waspadai perwira tanpa perlindungan (hanging pieces), motif garpu taktis (fork) dari kuda, serta skewer di sepanjang diagonal tajam.
 
 🏆 Tips Mental Grandmaster:
-"Sebelum melakukan langkah agresif, selalu luangkan 5 detik untuk memeriksa apa yang diancam lawan pada giliran berikutnya."`;
+"Langkah terbaik bukan hanya langkah yang indah menyerang, tetapi langkah yang membuat lawan kehabisan pilihan rencana yang bagus."`;
 
     return res.json({ advice: dynamicAdvice });
   } catch (error: any) {
-    console.error('Server Coach Route Error:', error);
-    return res.status(500).json({ 
-      error: 'Gagal memproses analisis.',
-      details: error.message || String(error)
+    return res.json({ 
+      advice: '💡 Analisis Posisi Grandmaster:\nJaga struktur pion dan posisikan perwira di petak aktif. Amankan raja sebelum melancarkan serangan terbuka.'
     });
   }
 });

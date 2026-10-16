@@ -12,6 +12,7 @@ import {
 import { AndroidInstallerModal } from './AndroidInstallerModal.tsx';
 import { FlutterExportModal } from './FlutterExportModal.tsx';
 import { getActivePlayerUsername } from '../utils/playerStorage.ts';
+import { usePWAInstall } from '../utils/usePWAInstall.ts';
 
 interface AndroidFrameProps {
   children: React.ReactNode;
@@ -30,6 +31,7 @@ export const AndroidFrame: React.FC<AndroidFrameProps> = ({
 }) => {
   const [showInstaller, setShowInstaller] = useState<boolean>(false);
   const [showFlutterCode, setShowFlutterCode] = useState<boolean>(false);
+  const { isInstalled } = usePWAInstall();
 
   const activeUsername = getActivePlayerUsername();
 
@@ -81,27 +83,30 @@ export const AndroidFrame: React.FC<AndroidFrameProps> = ({
               <span className="hidden xs:inline">Coach AI</span>
             </button>
 
-            {/* Flutter Source Code Modal Trigger */}
-            <button
-              type="button"
-              onClick={() => setShowFlutterCode(true)}
-              className="min-h-[40px] px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Lihat Source Code Flutter Native"
-            >
-              <Code2 className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="hidden sm:inline">Flutter Native</span>
-            </button>
+            {/* Flutter Source Code & Install APK Triggers (Automatically hidden after app is installed) */}
+            {!isInstalled && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setShowFlutterCode(true)}
+                  className="min-h-[40px] px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Lihat Source Code Flutter Native"
+                >
+                  <Code2 className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="hidden sm:inline">Flutter Native</span>
+                </button>
 
-            {/* Install APK Trigger */}
-            <button
-              type="button"
-              onClick={() => setShowInstaller(true)}
-              className="min-h-[40px] px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Pasang / Download APK"
-            >
-              <Download className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden sm:inline">Pasang APK</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setShowInstaller(true)}
+                  className="min-h-[40px] px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Pasang / Download APK"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">Pasang APK</span>
+                </button>
+              </>
+            )}
 
             {/* Audio Toggle */}
             <button

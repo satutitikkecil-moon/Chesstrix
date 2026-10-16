@@ -78,6 +78,7 @@ export default function App() {
             onClearLoadMoves={() => setOpeningMovesToLoad(null)}
             onJumpToReviewWithFen={() => setActiveTab('review')}
             onOpenCoachAi={handleTriggerCoachAi}
+            onAnalyzeGame={handleAnalyzeGame}
           />
         )}
 

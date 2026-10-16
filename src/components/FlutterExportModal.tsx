@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Terminal, Copy, Check, Download, X, Code2, Smartphone } from 'lucide-react';
+import { Terminal, Copy, Check, Download, X, Code2, Smartphone, CheckCircle } from 'lucide-react';
+import { usePWAInstall } from '../utils/usePWAInstall.ts';
 
 interface FlutterExportModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface FlutterExportModalProps {
 export const FlutterExportModal: React.FC<FlutterExportModalProps> = ({ isOpen, onClose }) => {
   const [copiedTab, setCopiedTab] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'main' | 'pubspec' | 'instructions'>('main');
+  const { setManualInstalled } = usePWAInstall();
 
   if (!isOpen) return null;
 
@@ -314,7 +316,20 @@ flutter:
         </div>
 
         {/* Footer */}
-        <div className="p-3 bg-slate-950 border-t border-slate-800 flex justify-end">
+        <div className="p-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setManualInstalled(true);
+              onClose();
+            }}
+            className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Tandai aplikasi sudah diinstal untuk menyembunyikan tombol header"
+          >
+            <CheckCircle className="w-3.5 h-3.5" />
+            <span>Tandai Terpasang (Sembunyikan Tombol Header)</span>
+          </button>
+
           <button
             type="button"
             onClick={onClose}

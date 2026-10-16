@@ -23,7 +23,7 @@ export const AndroidInstallerModal: React.FC<AndroidInstallerModalProps> = ({
   isOpen,
   onClose
 }) => {
-  const { isInstallable, isInstalled, isAndroid, isIOS, install } = usePWAInstall();
+  const { isInstallable, isInstalled, isAndroid, isIOS, install, setManualInstalled } = usePWAInstall();
   const [copied, setCopied] = useState<boolean>(false);
   const [activeSubTab, setActiveSubTab] = useState<'webapk' | 'standalone_apk'>('webapk');
 
@@ -155,16 +155,27 @@ bubblewrap build`;
                   onClick={async () => {
                     if (isInstallable) {
                       await install();
-                    } else {
-                      // Fallback prompt for browser menu
-                      alert('Untuk memasang di Android:\n1. Buka menu titik tiga (⋮) di pojok kanan atas browser Chrome.\n2. Pilih "Pasang aplikasi" atau "Tambahkan ke Layar Utama".');
                     }
+                    setManualInstalled(true);
+                    onClose();
                   }}
                   className="w-full min-h-[48px] px-4 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold flex items-center justify-center gap-2 transition-transform active:scale-98 cursor-pointer shadow-lg mt-2"
                 >
                   <ArrowDownCircle className="w-4 h-4" />
-                  <span>Pasang Aplikasi Sekarang</span>
+                  <span>{isInstalled ? 'Aplikasi Sudah Terpasang' : 'Pasang Aplikasi Sekarang'}</span>
                 </button>
+
+                {/* Manual toggle state button */}
+                <div className="pt-1 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Status tombol header:</span>
+                  <button
+                    type="button"
+                    onClick={() => setManualInstalled(!isInstalled)}
+                    className="text-emerald-400 hover:underline cursor-pointer font-medium"
+                  >
+                    {isInstalled ? 'Tampilkan Kembali Tombol' : 'Tandai Sudah Terpasang (Sembunyikan Tombol)'}
+                  </button>
+                </div>
               </div>
 
               {/* Instructions steps */}

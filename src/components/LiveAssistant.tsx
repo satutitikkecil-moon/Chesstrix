@@ -13,6 +13,8 @@ import {
 import { findOpening, OpeningStat } from '../utils/openingsData.ts';
 import { playChessSound } from '../utils/chessAudio.ts';
 import { InGameAICoach } from './InGameAICoach.tsx';
+import { analyzePgnGame, AnalyzedGame, GameMetadata } from '../utils/sampleGames.ts';
+import { getActivePlayerUsername } from '../utils/playerStorage.ts';
 import { 
   RotateCcw, 
   ArrowLeftRight, 
@@ -23,7 +25,12 @@ import {
   Lightbulb, 
   Dices,
   Info,
-  Bot
+  Bot,
+  Swords,
+  Users,
+  Shield,
+  Trophy,
+  CheckCircle2
 } from 'lucide-react';
 
 interface LiveAssistantProps {
@@ -32,6 +39,7 @@ interface LiveAssistantProps {
   onClearLoadMoves?: () => void;
   onJumpToReviewWithFen?: (fen: string) => void;
   onOpenCoachAi?: (data: { fen: string; turn: 'w' | 'b'; evalScore: string; openingName?: string; moves: string[] }) => void;
+  onAnalyzeGame?: (game: AnalyzedGame) => void;
 }
 
 export const LiveAssistant: React.FC<LiveAssistantProps> = ({
@@ -39,7 +47,8 @@ export const LiveAssistant: React.FC<LiveAssistantProps> = ({
   loadMoves,
   onClearLoadMoves,
   onJumpToReviewWithFen,
-  onOpenCoachAi
+  onOpenCoachAi,
+  onAnalyzeGame
 }) => {
   const [chess] = useState<Chess>(() => new Chess());
   const [fen, setFen] = useState<string>(chess.fen());
@@ -48,6 +57,13 @@ export const LiveAssistant: React.FC<LiveAssistantProps> = ({
   const [lastMove, setLastMove] = useState<{ from: string; to: string } | null>(null);
   const [showBestArrow, setShowBestArrow] = useState<boolean>(true);
   const [showThreatArrow, setShowThreatArrow] = useState<boolean>(true);
+
+  // Gameplay Mode: Solo with AI Coach vs 2-Player Local PvP (Pass & Play)
+  const [gameMode, setGameMode] = useState<'solo' | 'pvp'>('solo');
+  const [pvpFairPlay, setPvpFairPlay] = useState<boolean>(true);
+  const activeUser = getActivePlayerUsername();
+  const [whitePlayer, setWhitePlayer] = useState<string>(activeUser);
+  const [blackPlayer, setBlackPlayer] = useState<string>('Lawan PvP');
 
   // If loadMoves is passed from OpeningsExplorer, load the move sequence
   useEffect(() => {
@@ -175,14 +191,119 @@ export const LiveAssistant: React.FC<LiveAssistantProps> = ({
     if (soundEnabled) playChessSound('move');
   };
 
+  const handleFinishPvP = () => {
+    const meta: GameMetadata = {
+      id: `pvp-${Date.now()}`,
+      title: `PvP: ${whitePlayer} vs ${blackPlayer}`,
+      event: 'Duel PvP Lokal (Pass & Play)',
+      date: new Date().toISOString().split('T')[0],
+      white: { username: whitePlayer, rating: 1500 },
+      black: { username: blackPlayer, rating: 1500 },
+      result: chess.isGameOver() ? (chess.turn() === 'w' ? '0-1' : '1-0') : '*',
+      timeControl: '10 min',
+      openingName: opening?.name || 'Standard Opening',
+      eco: opening?.eco || 'A00',
+      pgn: chess.pgn() || historySan.join(' ')
+    };
+    const analyzed = analyzePgnGame(meta);
+    if (onAnalyzeGame) {
+      onAnalyzeGame(analyzed);
+    } else if (onJumpToReviewWithFen) {
+      onJumpToReviewWithFen(fen);
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col p-3 sm:p-4 gap-3 overflow-y-auto">
+      {/* Game Mode Selector: Solo vs PvP */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-1.5 flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => setGameMode('solo')}
+          className={`flex-1 min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+            gameMode === 'solo'
+              ? 'bg-emerald-500 text-slate-950 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+          }`}
+        >
+          <Bot className="w-3.5 h-3.5" />
+          <span>Latihan & Analisis AI</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setGameMode('pvp');
+            setOrientation('w');
+          }}
+          className={`flex-1 min-h-[36px] px-3 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+            gameMode === 'pvp'
+              ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 shadow-sm'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+          }`}
+        >
+          <Swords className="w-3.5 h-3.5" />
+          <span>Mode Duel PvP (2 Pemain)</span>
+        </button>
+      </div>
+
+      {/* PvP Banner & Controls when PvP is active */}
+      {gameMode === 'pvp' && (
+        <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-cyan-950/40 border border-cyan-500/40 rounded-xl p-3 flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-xs">
+                ⚔️
+              </div>
+              <div>
+                <span className="text-xs font-bold text-white block">Duel PvP Pass & Play</span>
+                <span className="text-[11px] text-slate-400">
+                  ⚪ <span className="text-emerald-300 font-medium">{whitePlayer}</span> vs ⚫ <span className="text-cyan-300 font-medium">{blackPlayer}</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Fair Play Shield Toggle */}
+            <button
+              type="button"
+              onClick={() => setPvpFairPlay(!pvpFairPlay)}
+              className={`min-h-[32px] px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-colors flex items-center gap-1 cursor-pointer ${
+                pvpFairPlay
+                  ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300'
+                  : 'bg-slate-800 border-slate-700 text-slate-400'
+              }`}
+              title={pvpFairPlay ? 'Mode Fair Play Aktif (Bantuan langkah disembunyikan agar adil)' : 'Bantuan AI Terbuka'}
+            >
+              <Shield className={`w-3.5 h-3.5 ${pvpFairPlay ? 'text-cyan-400' : 'text-slate-500'}`} />
+              <span>{pvpFairPlay ? 'Fair Play On' : 'Bantuan On'}</span>
+            </button>
+          </div>
+
+          {/* Finish PvP Button */}
+          {historySan.length >= 2 && (
+            <button
+              type="button"
+              onClick={handleFinishPvP}
+              className="w-full min-h-[38px] px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-400 hover:to-blue-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-transform active:scale-98 shadow-md cursor-pointer"
+            >
+              <Trophy className="w-4 h-4 text-slate-950" />
+              <span>Selesai & Review Akurasi Game PvP ({historySan.length} Langkah)</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Top Header & Turn Indicator */}
       <div className="flex items-center justify-between bg-slate-900/80 border border-slate-800 rounded-xl p-2.5">
         <div className="flex items-center gap-2">
           <div className={`w-3.5 h-3.5 rounded-full border border-slate-600 ${chess.turn() === 'w' ? 'bg-white' : 'bg-slate-950'}`} />
           <span className="text-xs font-semibold text-slate-200">
             Giliran: {chess.turn() === 'w' ? 'Putih' : 'Hitam'}
+            {gameMode === 'pvp' && (
+              <span className="ml-1 text-slate-400">
+                ({chess.turn() === 'w' ? whitePlayer : blackPlayer})
+              </span>
+            )}
           </span>
           {chess.inCheck() && (
             <span className="text-[11px] font-bold text-rose-400 bg-rose-500/20 px-2 py-0.5 rounded-md">
@@ -191,31 +312,35 @@ export const LiveAssistant: React.FC<LiveAssistantProps> = ({
           )}
         </div>
 
-        {/* Tactical Efficiency Gauge */}
-        <div className="flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-emerald-400" />
-          <div className="text-right">
-            <span className="text-[11px] text-slate-400">Efisiensi: </span>
-            <span className={`text-xs font-mono font-bold ${
-              engineResult.efficiency >= 70 ? 'text-emerald-400' : (engineResult.efficiency >= 45 ? 'text-amber-400' : 'text-rose-400')
-            }`}>
-              {engineResult.efficiency}%
-            </span>
+        {/* Tactical Efficiency Gauge (Hidden in Fair Play PvP) */}
+        {(!pvpFairPlay || gameMode === 'solo') && (
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-emerald-400" />
+            <div className="text-right">
+              <span className="text-[11px] text-slate-400">Efisiensi: </span>
+              <span className={`text-xs font-mono font-bold ${
+                engineResult.efficiency >= 70 ? 'text-emerald-400' : (engineResult.efficiency >= 45 ? 'text-amber-400' : 'text-rose-400')
+              }`}>
+                {engineResult.efficiency}%
+              </span>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Main Board Row: Eval bar + 8x8 Chessboard */}
       <div className="flex items-center justify-center gap-2.5 w-full">
-        <EvalBar score={engineResult.score} orientation={orientation} />
+        {(!pvpFairPlay || gameMode === 'solo') && (
+          <EvalBar score={engineResult.score} orientation={orientation} />
+        )}
 
         <div className="flex-1 max-w-[370px]">
           <ChessBoard
             fen={fen}
             orientation={orientation}
             lastMove={lastMove}
-            bestMoveArrow={showBestArrow && engineResult.bestMove ? { from: engineResult.bestMove.from, to: engineResult.bestMove.to } : null}
-            threatArrow={showThreatArrow && engineResult.threats.length > 0 && engineResult.threats[0].sourceSquare ? { from: engineResult.threats[0].sourceSquare, to: engineResult.threats[0].targetSquare } : null}
+            bestMoveArrow={(gameMode === 'solo' || !pvpFairPlay) && showBestArrow && engineResult.bestMove ? { from: engineResult.bestMove.from, to: engineResult.bestMove.to } : null}
+            threatArrow={(gameMode === 'solo' || !pvpFairPlay) && showThreatArrow && engineResult.threats.length > 0 && engineResult.threats[0].sourceSquare ? { from: engineResult.threats[0].sourceSquare, to: engineResult.threats[0].targetSquare } : null}
             interactive={true}
             onMove={handleMakeMove}
             checkSquare={chess.inCheck() ? (chess.turn() === 'w' ? 'e1' : 'e8') : null}
@@ -268,24 +393,55 @@ export const LiveAssistant: React.FC<LiveAssistantProps> = ({
         </button>
       </div>
 
-      {/* In-Game AI Assistant Coach (Live on Board) */}
-      <InGameAICoach
-        fen={fen}
-        turn={chess.turn()}
-        evalScore={engineResult.evalString}
-        openingName={opening?.name}
-        recentMoves={historySan}
-        bestMoveSan={engineResult.bestMove?.san}
-        bestMoveFromTo={engineResult.bestMove ? { from: engineResult.bestMove.from, to: engineResult.bestMove.to } : null}
-        threats={engineResult.threats}
-        soundEnabled={soundEnabled}
-        onPlayMove={(move) => {
-          handleMakeMove({
-            from: move.from,
-            to: move.to
-          });
-        }}
-      />
+      {/* In-Game AI Assistant Coach or PvP Fair Play Notice */}
+      {gameMode === 'pvp' && pvpFairPlay ? (
+        <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-cyan-950/30 border border-cyan-500/30 rounded-2xl p-4 flex flex-col gap-2.5 shadow-lg">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 flex items-center justify-center font-bold shadow-sm">
+              <Shield className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-white block">
+                Mode Sportivitas Fair Play Aktif (PvP)
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Saran langkah AI ditangguhkan selama duel agar adil untuk kedua pemain.
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-slate-300 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+            <span>
+              Total Langkah: <strong className="text-cyan-400 font-mono">{historySan.length}</strong> langkah
+            </span>
+            <button
+              type="button"
+              onClick={() => setPvpFairPlay(false)}
+              className="text-[11px] text-slate-400 hover:text-cyan-300 underline cursor-pointer"
+            >
+              Aktifkan Bantuan Bersama
+            </button>
+          </div>
+        </div>
+      ) : (
+        <InGameAICoach
+          fen={fen}
+          turn={chess.turn()}
+          evalScore={engineResult.evalString}
+          openingName={opening?.name}
+          recentMoves={historySan}
+          bestMoveSan={engineResult.bestMove?.san}
+          bestMoveFromTo={engineResult.bestMove ? { from: engineResult.bestMove.from, to: engineResult.bestMove.to } : null}
+          threats={engineResult.threats}
+          soundEnabled={soundEnabled}
+          onPlayMove={(move) => {
+            handleMakeMove({
+              from: move.from,
+              to: move.to
+            });
+          }}
+        />
+      )}
 
 
 
