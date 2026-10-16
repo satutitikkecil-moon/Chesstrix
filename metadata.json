@@ -1,0 +1,6 @@
+{
+  "name": "ChessTactix - Chess.com Analyzer & Real-Time Coach",
+  "description": "Aplikasi analisis gameplay Chess.com dengan rekomendasi strategi statistik, asisten langkah real-time, dan evaluasi pasca-pertandingan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
